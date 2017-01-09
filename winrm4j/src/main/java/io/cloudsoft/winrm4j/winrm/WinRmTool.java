@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 import javax.net.ssl.HostnameVerifier;
 
 import io.cloudsoft.winrm4j.client.WinRmClient;
+import io.cloudsoft.winrm4j.client.credssp.CredSspScheme;
+
 import org.apache.http.client.config.AuthSchemes;
 
 /**
@@ -22,6 +24,8 @@ public class WinRmTool {
 
     public static final int DEFAULT_WINRM_PORT = 5985;
     public static final int DEFAULT_WINRM_HTTPS_PORT = 5986;
+    
+    public static final String AUTH_SCHEME_CREDSSP = CredSspScheme.SCHEME_NAME;
 
     // TODO consider make them non-final and accessing the properties directly from builder.
     // This impose moving getEndpointUrl() to the WinRmTool.

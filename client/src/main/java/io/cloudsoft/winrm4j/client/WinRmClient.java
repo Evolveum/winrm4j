@@ -28,6 +28,7 @@ import javax.xml.ws.spi.ServiceDelegate;
 
 import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
+import org.apache.cxf.bus.managers.DestinationFactoryManagerImpl;
 import org.apache.cxf.configuration.jsse.TLSClientParameters;
 import org.apache.cxf.endpoint.Client;
 import org.apache.cxf.feature.Feature;
@@ -35,6 +36,7 @@ import org.apache.cxf.frontend.ClientProxy;
 import org.apache.cxf.jaxws.JaxWsProxyFactoryBean;
 import org.apache.cxf.jaxws.spi.ProviderImpl;
 import org.apache.cxf.service.model.ServiceInfo;
+import org.apache.cxf.transport.ConduitInitiatorManager;
 import org.apache.cxf.transport.http.asyncclient.AsyncHTTPConduit;
 import org.apache.cxf.transport.http.asyncclient.AsyncHTTPConduitFactory;
 import org.apache.cxf.transports.http.configuration.HTTPClientPolicy;
@@ -52,10 +54,14 @@ import org.apache.http.config.RegistryBuilder;
 import org.apache.http.impl.auth.BasicSchemeFactory;
 import org.apache.http.impl.auth.KerberosSchemeFactory;
 import org.apache.http.impl.auth.SPNegoSchemeFactory;
+import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.NodeList;
 
+import io.cloudsoft.winrm4j.client.credssp.CredSspScheme;
+import io.cloudsoft.winrm4j.client.credssp.CredSspSchemeFactory;
+import io.cloudsoft.winrm4j.client.cxf.CustomAsyncHttpTransportFactory;
 import io.cloudsoft.winrm4j.client.ntlm.SpNegoNTLMSchemeFactory;
 import io.cloudsoft.winrm4j.client.shell.CommandLine;
 import io.cloudsoft.winrm4j.client.shell.CommandStateType;
@@ -426,6 +432,10 @@ public class WinRmClient {
 
     private synchronized WinRm createService() {
         if (winrm != null) return winrm;
+        
+        LOG.info("######### creating service");
+        
+        initializeBus();
     
         RuntimeException lastException = null;
         
@@ -565,6 +575,8 @@ public class WinRmClient {
     private synchronized WinRmService doCreateService_1_CreateMinimalServiceInstance() {
         return new WinRmService();
     }
+    
+    
     private synchronized Client doCreateService_2_GetClient(WinRmService service) {
 //        JaxWsDynamicClientFactory dcf = JaxWsDynamicClientFactory.newInstance();
 //        Client client = dcf.createClient("people.wsdl", classLoader);
@@ -574,6 +586,14 @@ public class WinRmClient {
                 newMemberSubmissionAddressingFeature());
 
         return ClientProxy.getClient(winrm);
+    }
+    
+    private synchronized void initializeBus() {
+    	Bus bus = BusFactory.getThreadDefaultBus();
+    	CustomAsyncHttpTransportFactory customTransportFactory = new CustomAsyncHttpTransportFactory();
+    	ConduitInitiatorManager conduitInitiatorManager = bus.getExtension(ConduitInitiatorManager.class);
+    	conduitInitiatorManager.registerConduitInitiator("http://cxf.apache.org/transports/http", customTransportFactory);
+    	LOG.info("####### registered conduit initiator: {}", customTransportFactory);
     }
     
     private synchronized void doCreateService_3_InitializeClientAndService(Client client) {
@@ -647,6 +667,9 @@ public class WinRmClient {
                 httpClient.setClient(httpClientPolicy);
                 httpClient.getClient().setAutoRedirect(true);
                 break;
+            case CredSspScheme.SCHEME_NAME:
+            	setUpCreddSspAuth(client, bp);
+            	break;
             default:
                 throw new UnsupportedOperationException("No such authentication scheme " + authenticationScheme);
         }
@@ -698,7 +721,25 @@ public class WinRmClient {
         shellSelector.getSelector().add(sel);
     }
 
-    // TODO
+    private void setUpCreddSspAuth(Client client, BindingProvider bp) {
+    	Credentials creds = new NTCredentials(username, password, null, domain);
+    	Registry<AuthSchemeProvider> authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
+                .register(CredSspScheme.SCHEME_NAME, new CredSspSchemeFactory()).build();
+    	bp.getRequestContext().put(Credentials.class.getName(), creds);
+        bp.getRequestContext().put("http.autoredirect", true);
+        bp.getRequestContext().put(AuthSchemeProvider.class.getName(), authSchemeRegistry);
+        
+        AsyncHTTPConduit httpClientConduit = (AsyncHTTPConduit) client.getConduit();
+        
+        HTTPClientPolicy httpClientPolicy = new HTTPClientPolicy();
+        httpClientPolicy.setAllowChunking(false);
+        httpClientPolicy.setReceiveTimeout(receiveTimeout);
+
+        httpClientConduit.setClient(httpClientPolicy);
+        httpClientConduit.getClient().setAutoRedirect(true);
+	}
+
+	// TODO
     private static WebServiceFeature newMemberSubmissionAddressingFeature() {
         /*
          * Requires the following dependency so the feature is visible to maven.
