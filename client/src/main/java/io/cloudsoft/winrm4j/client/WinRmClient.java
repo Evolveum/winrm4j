@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.text.DecimalFormat;
@@ -53,6 +54,7 @@ import org.apache.http.impl.auth.BasicSchemeFactory;
 import org.apache.http.impl.auth.CredSspSchemeFactory;
 import org.apache.http.impl.auth.KerberosSchemeFactory;
 import org.apache.http.impl.auth.SPNegoSchemeFactory;
+import org.apache.http.util.CharsetUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.NodeList;
@@ -65,6 +67,8 @@ import io.cloudsoft.winrm4j.client.shell.EnvironmentVariable;
 import io.cloudsoft.winrm4j.client.shell.EnvironmentVariableList;
 import io.cloudsoft.winrm4j.client.shell.Receive;
 import io.cloudsoft.winrm4j.client.shell.ReceiveResponse;
+import io.cloudsoft.winrm4j.client.shell.Send;
+import io.cloudsoft.winrm4j.client.shell.SendResponse;
 import io.cloudsoft.winrm4j.client.shell.Shell;
 import io.cloudsoft.winrm4j.client.shell.StreamType;
 import io.cloudsoft.winrm4j.client.transfer.ResourceCreated;
@@ -87,6 +91,7 @@ public class WinRmClient {
     private static final String COMMAND_STATE_DONE = "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/CommandState/Done";
     private static final int MAX_ENVELOPER_SIZE = 153600;
     private static final String RESOURCE_URI = "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd";
+    private static final Charset CHARSET = CharsetUtils.lookup("UTF-8");
 
     /**
      * If no output is available before the wsman:OperationTimeout expires, the server MUST return a WSManFault with the Code attribute equal to "2150858793"
@@ -277,6 +282,32 @@ public class WinRmClient {
             }
         }
     }
+    
+    public Command commandAsync(String cmd) {
+        checkNotNull(cmd, "command");
+        final WinRm service = getService();
+
+        final CommandLine cmdLine = new CommandLine();
+        cmdLine.setCommand(cmd);
+        final OptionSetType optSetCmd = new OptionSetType();
+        OptionType optConsolemodeStdin = new OptionType();
+        optConsolemodeStdin.setName("WINRS_CONSOLEMODE_STDIN");
+        optConsolemodeStdin.setValue("TRUE");
+        optSetCmd.getOption().add(optConsolemodeStdin);
+        OptionType optSkipCmdShell = new OptionType();
+        optSkipCmdShell.setName("WINRS_SKIP_CMD_SHELL");
+        optSkipCmdShell.setValue("FALSE");
+        optSetCmd.getOption().add(optSkipCmdShell);
+
+        numberOfReceiveCalls = 0;
+        //TODO use different instances of service http://cxf.apache.org/docs/developing-a-consumer.html#DevelopingaConsumer-SettingConnectionPropertieswithContexts
+        setActionToContext((BindingProvider) service, "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Command");
+        CommandResponse cmdResponse = service.command(cmdLine, RESOURCE_URI, MAX_ENVELOPER_SIZE, operationTimeout, locale, shellSelector, optSetCmd);
+
+        String commandId = cmdResponse.getCommandId();
+        
+        return new Command(this, commandId);
+    }
 
     // TODO fix CXF to not set a wrong action https://issues.apache.org/jira/browse/CXF-4647
     private void setActionToContext(BindingProvider bp, String action) {
@@ -300,7 +331,7 @@ public class WinRmClient {
         return addrProps;
     }
 
-    private void releaseCommand(String commandId) {
+    void releaseCommand(String commandId) {
         final Signal signal = new Signal();
         signal.setCommandId(commandId);
         signal.setCode("http://schemas.microsoft.com/wbem/wsman/1/windows/shell/signal/terminate");
@@ -317,40 +348,80 @@ public class WinRmClient {
     }
 
     private int receiveCommand(String commandId, Writer out, Writer err) {
-        while(true) {
-            final Receive receive = new Receive();
-            DesiredStreamType stream = new DesiredStreamType();
-            stream.setCommandId(commandId);
-            stream.setValue("stdout stderr");
-            receive.setDesiredStream(stream);
+    	while(true) {
+    		Integer exitCode = receiveCommandSingle(commandId, out, err);
+    		if (exitCode != null) {
+    			return exitCode;
+    		}
+    	}
+    }
+    
+    Integer receiveCommandSingle(String commandId, Writer out, Writer err) {
+        
+        final Receive receive = new Receive();
+        DesiredStreamType stream = new DesiredStreamType();
+        stream.setCommandId(commandId);
+        stream.setValue("stdout stderr");
+        receive.setDesiredStream(stream);
 
 
-            try {
-                numberOfReceiveCalls++;
-                ReceiveResponse receiveResponse = winrmCallRetryConnFailure(new CallableFunction<ReceiveResponse>() {
-                    @Override
-                    public ReceiveResponse call() {
-                        //TODO use different instances of service http://cxf.apache.org/docs/developing-a-consumer.html#DevelopingaConsumer-SettingConnectionPropertieswithContexts
-                        setActionToContext((BindingProvider) winrm, "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Receive");
-                        return winrm.receive(receive, RESOURCE_URI, MAX_ENVELOPER_SIZE, operationTimeout, locale, shellSelector);
-                    }
-                });
-                getStreams(receiveResponse, out, err);
-
-                CommandStateType state = receiveResponse.getCommandState();
-                if (COMMAND_STATE_DONE.equals(state.getState())) {
-                    return state.getExitCode().intValue();
-                } else {
-                    LOG.debug("{} is not done. Response it received: {}", this, receiveResponse);
+        try {
+            numberOfReceiveCalls++;
+            ReceiveResponse receiveResponse = winrmCallRetryConnFailure(new CallableFunction<ReceiveResponse>() {
+                @Override
+                public ReceiveResponse call() {
+                    //TODO use different instances of service http://cxf.apache.org/docs/developing-a-consumer.html#DevelopingaConsumer-SettingConnectionPropertieswithContexts
+                    setActionToContext((BindingProvider) winrm, "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Receive");
+                    return winrm.receive(receive, RESOURCE_URI, MAX_ENVELOPER_SIZE, operationTimeout, locale, shellSelector);
                 }
-            } catch (SOAPFaultException soapFault) {
-                /**
-                 * If such Exception which has a code 2150858793 the client is expected to again trigger immediately a receive request.
-                 * https://msdn.microsoft.com/en-us/library/cc251676.aspx
-                 */
-                assertFaultCode(soapFault, WSMAN_FAULT_CODE_OPERATION_TIMEOUT_EXPIRED);
+            });
+            getStreams(receiveResponse, out, err);
+
+            CommandStateType state = receiveResponse.getCommandState();
+            if (COMMAND_STATE_DONE.equals(state.getState())) {
+                return state.getExitCode().intValue();
+            } else {
+                LOG.debug("{} is not done. Response it received: {}", this, receiveResponse);
             }
+        } catch (SOAPFaultException soapFault) {
+            /**
+             * If such Exception which has a code 2150858793 the client is expected to again trigger immediately a receive request.
+             * https://msdn.microsoft.com/en-us/library/cc251676.aspx
+             */
+            assertFaultCode(soapFault, WSMAN_FAULT_CODE_OPERATION_TIMEOUT_EXPIRED);
         }
+        
+        return null;
+    }
+    
+    void sendCommandSingle(String commandId, String tx) {
+    	
+    	final Send send = new Send();
+    	StreamType stream = new StreamType();
+    	stream.setCommandId(commandId);
+    	stream.setName("stdin");
+    	stream.setValue(tx.getBytes(CHARSET));
+		send.getStream().add(stream);
+    	
+    	try {
+            numberOfReceiveCalls++;
+            SendResponse sendResponse = winrmCallRetryConnFailure(new CallableFunction<SendResponse>() {
+                @Override
+                public SendResponse call() {
+                    setActionToContext((BindingProvider) winrm, "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Send");
+                    return winrm.send(send, RESOURCE_URI, MAX_ENVELOPER_SIZE, operationTimeout, locale, shellSelector);
+                }
+            });
+            LOG.debug("SendResponse received: {}", this, sendResponse);
+            
+        } catch (SOAPFaultException soapFault) {
+            /**
+             * If such Exception which has a code 2150858793 the client is expected to again trigger immediately a receive request.
+             * https://msdn.microsoft.com/en-us/library/cc251676.aspx
+             */
+            assertFaultCode(soapFault, WSMAN_FAULT_CODE_OPERATION_TIMEOUT_EXPIRED);
+        }
+    	
     }
 
     private void assertFaultCode(SOAPFaultException soapFault, String code) {
@@ -386,7 +457,7 @@ public class WinRmClient {
                 try {
                     //TODO use passed locale?
                     if (value.length > 0) {
-                        out.write(new String(value));
+                        out.write(new String(value, CHARSET));
                     }
                     if (Boolean.TRUE.equals(s.isEnd())) {
                         out.close();
@@ -399,7 +470,7 @@ public class WinRmClient {
                 try {
                     //TODO use passed locale?
                     if (value.length > 0) {
-                        err.write(new String(value));
+                        err.write(new String(value, CHARSET));
                     }
                     if (Boolean.TRUE.equals(s.isEnd())) {
                         err.close();

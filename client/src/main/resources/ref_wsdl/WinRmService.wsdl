@@ -15,6 +15,10 @@
       <xs:element name="Receive" nillable="true" type="tns:Receive"/>
 
       <xs:element name="ReceiveResponse" nillable="true" type="tns:ReceiveResponse"/>
+      
+      <xs:element name="Send" nillable="true" type="tns:Send"/>
+
+      <xs:element name="SendResponse" nillable="true" type="tns:SendResponse"/>
 
       <xs:element name="Shell" nillable="true" type="tns:Shell"/>
 
@@ -107,6 +111,19 @@
       <xs:attribute name="CommandId" type="xs:string"/>
 
       <xs:attribute name="SequenceID" type="xs:unsignedLong"/>
+            
+      <xs:complexType name="Send">
+        <xs:sequence>
+          <xs:element name="Stream" type="tns:StreamType" minOccurs="1" maxOccurs="unbounded"/>
+        </xs:sequence>
+      </xs:complexType>
+      
+      <xs:complexType name="SendResponse">
+        <xs:sequence>
+          <xs:element name="DesiredStream" type="tns:StreamType" minOccurs="0"/>
+        </xs:sequence>
+      </xs:complexType>
+      
     </xs:schema>
     <xs:schema elementFormDefault="qualified" version="1.0" targetNamespace="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:ns2="http://schemas.microsoft.com/wbem/wsman/1/windows/shell">
 
@@ -236,6 +253,17 @@
   <message name="ReceiveResponse">
     <part name="ReceiveResponse" element="ns5:ReceiveResponse" xmlns:ns5="http://schemas.microsoft.com/wbem/wsman/1/windows/shell"/>
   </message>
+  <message name="Send">
+    <part name="Send" element="ns4:Send" xmlns:ns4="http://schemas.microsoft.com/wbem/wsman/1/windows/shell"/>
+    <part name="ResourceURI" element="tns:ResourceURI"/>
+    <part name="MaxEnvelopeSize" element="tns:MaxEnvelopeSize"/>
+    <part name="OperationTimeout" element="tns:OperationTimeout"/>
+    <part name="Locale" element="tns:Locale"/>
+    <part name="SelectorSet" element="tns:SelectorSet"/>
+  </message>
+  <message name="SendResponse">
+    <part name="SendResponse" element="ns5:SendResponse" xmlns:ns5="http://schemas.microsoft.com/wbem/wsman/1/windows/shell"/>
+  </message>
   <message name="Delete">
     <part name="parameters" element="tns:Delete"/>
     <part name="ResourceURI" element="tns:ResourceURI"/>
@@ -279,6 +307,10 @@
     <operation name="Receive" parameterOrder="Receive ResourceURI MaxEnvelopeSize OperationTimeout Locale SelectorSet">
       <input wsam:Action="http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Receive" message="tns:Receive"/>
       <output wsam:Action="http://schemas.microsoft.com/wbem/wsman/1/windows/shell/ReceiveResponse" message="tns:ReceiveResponse"/>
+    </operation>
+    <operation name="Send" parameterOrder="Send ResourceURI MaxEnvelopeSize OperationTimeout Locale SelectorSet">
+      <input wsam:Action="http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Send" message="tns:Receive"/>
+      <output wsam:Action="http://schemas.microsoft.com/wbem/wsman/1/windows/shell/SendResponse" message="tns:SendResponse"/>
     </operation>
     <operation name="Delete" parameterOrder="parameters ResourceURI MaxEnvelopeSize OperationTimeout Locale SelectorSet">
       <input wsam:Action="http://schemas.xmlsoap.org/ws/2004/09/transfer/Delete" message="tns:Delete"/>
