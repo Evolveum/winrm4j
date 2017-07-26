@@ -6,6 +6,7 @@ import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.channels.IllegalSelectorException;
 import java.nio.charset.Charset;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
@@ -57,6 +58,8 @@ import org.apache.http.impl.auth.SPNegoSchemeFactory;
 import org.apache.http.util.CharsetUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import io.cloudsoft.winrm4j.client.ntlm.SpNegoNTLMSchemeFactory;
@@ -733,7 +736,14 @@ public class WinRmClient {
                 return winrm.create(holder, RESOURCE_URI, MAX_ENVELOPER_SIZE, operationTimeout, locale, optSetCreate);
             }
         });
-        shellId = holder.value.getShellId();
+        if (holder.value == null) {
+        	// This should not happen in theory. Message parts are mandatory.
+        	// But in practice it does happen. Windows 2008 WinRm does not return
+        	// Shell part. The shellId is buried deep in ResourceCreated in selector set.
+        	shellId = getShellIdFromResourceCreated(resourceCreated);
+        } else {
+        	shellId = holder.value.getShellId();
+        }
 
         shellSelector = new SelectorSetType();
         SelectorType sel = new SelectorType();
@@ -742,7 +752,41 @@ public class WinRmClient {
         shellSelector.getSelector().add(sel);
     }
 
-    private void setupHttpClient(Client client, BindingProvider bp, Registry<AuthSchemeProvider> authSchemeRegistry) {
+    private String getShellIdFromResourceCreated(ResourceCreated resourceCreated) {
+    	for (Element element: resourceCreated.getAny()) {
+    		if ("ReferenceParameters".equals(element.getLocalName())) {
+    			Element selectorSet = findSubElement(element, "SelectorSet");
+    			if (selectorSet == null) {
+    				throw new IllegalStateException("No selector set in response");
+    			}
+    			Element selector = findSubElement(selectorSet, "Selector");
+    			if (selector == null) {
+    				throw new IllegalStateException("No shell selector in response");
+    			}
+    			return selector.getTextContent();
+    		}
+    	}
+    	throw new IllegalStateException("No ReferenceParameters in response");
+	}
+
+	private Element findSubElement(Element element, String name) {
+		NodeList childNodes = element.getChildNodes();
+		Element subElement = null;
+		for (int i = 0; i < childNodes.getLength(); i ++) {
+			Node subnode = childNodes.item(i);
+			if (subnode.getNodeType() == Node.ELEMENT_NODE) {
+				if (name.equals(((Element)subnode).getLocalName())) {
+					if (subElement != null) {
+						throw new IllegalStateException("More than one element '+name+' found under element '"+element.getLocalName()+"'");
+					}
+					subElement = (Element)subnode;
+				}
+			}
+		}
+		return subElement;
+	}
+
+	private void setupHttpClient(Client client, BindingProvider bp, Registry<AuthSchemeProvider> authSchemeRegistry) {
     	Credentials creds = new NTCredentials(username, password, null, domain);
 
         bp.getRequestContext().put(Credentials.class.getName(), creds);
