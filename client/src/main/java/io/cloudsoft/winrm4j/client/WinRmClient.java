@@ -55,6 +55,7 @@ import org.apache.http.impl.auth.BasicSchemeFactory;
 import org.apache.http.impl.auth.CredSspSchemeFactory;
 import org.apache.http.impl.auth.KerberosSchemeFactory;
 import org.apache.http.impl.auth.SPNegoSchemeFactory;
+import org.apache.http.impl.auth.SSLEngineFactory;
 import org.apache.http.util.CharsetUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,6 +130,7 @@ public class WinRmClient {
 
     private boolean disableCertificateChecks;
     private HostnameVerifier hostnameVerifier;
+    private SSLEngineFactory sslEngineFactory;
 
     public static Builder builder(URL endpoint) {
         return new Builder(endpoint, AuthSchemes.NTLM);
@@ -209,6 +211,11 @@ public class WinRmClient {
         
         public Builder hostnameVerifier(HostnameVerifier hostnameVerifier) {
         	client.hostnameVerifier = hostnameVerifier;
+        	return this;
+        }
+        
+        public Builder sslEngineFactory(SSLEngineFactory sslEngineFactory) {
+        	client.sslEngineFactory = sslEngineFactory;
         	return this;
         }
 
@@ -687,8 +694,10 @@ public class WinRmClient {
                 
             case AuthSchemes.CREDSSP:
             	
+            	CredSspSchemeFactory credSspFactory = new CredSspSchemeFactory();
+            	credSspFactory.setSslEngineFactory(sslEngineFactory);
             	authSchemeRegistry = RegistryBuilder.<AuthSchemeProvider>create()
-                .register(AuthSchemes.CREDSSP, new CredSspSchemeFactory())
+                .register(AuthSchemes.CREDSSP, credSspFactory)
                 .build();
             	
             	setupHttpClient(client, bp, authSchemeRegistry);
