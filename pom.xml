@@ -65,6 +65,7 @@
     <testng.version>6.8.8</testng.version>
     <guava.version>17.0</guava.version>
     <cxf.version>3.1.4</cxf.version>
+    <httpclient.version>4.5.4-SNAPSHOT</httpclient.version>
   </properties>
 
   <modules>
