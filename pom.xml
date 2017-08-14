@@ -67,6 +67,19 @@
     <cxf.version>3.1.12.e1</cxf.version>
     <httpclient.version>4.5.4-SNAPSHOT</httpclient.version>
   </properties>
+  
+  <distributionManagement>
+    <repository>
+        <id>evolveum-nexus</id>
+        <name>Internal Releases</name>
+        <url>http://nexus.evolveum.com/nexus/content/repositories/releases/</url>
+    </repository>
+    <snapshotRepository>
+        <id>evolveum-nexus</id>
+        <name>Internal Snapshots</name>
+        <url>http://nexus.evolveum.com/nexus/content/repositories/snapshots/</url>
+    </snapshotRepository>
+  </distributionManagement>
 
   <modules>
     <module>service</module>
