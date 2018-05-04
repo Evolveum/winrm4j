@@ -65,8 +65,44 @@
     <testng.version>6.8.8</testng.version>
     <guava.version>17.0</guava.version>
     <cxf.version>3.1.12.e1</cxf.version>
-    <httpclient.version>4.5.3.e2</httpclient.version>
+    <httpclient.version>4.5.3.e3</httpclient.version>
   </properties>
+  
+  <repositories>
+        <repository>
+            <id>evolveum-nexus-releases</id>
+            <name>Internal Releases</name>
+            <url>http://nexus.evolveum.com/nexus/content/repositories/releases/</url>
+        </repository>
+        <repository>
+            <id>evolveum-nexus-snapshots</id>
+            <name>Internal Releases</name>
+            <url>http://nexus.evolveum.com/nexus/content/repositories/snapshots/</url>
+        </repository>
+        <repository>
+            <id>apache-snapshots</id>
+            <name>Apache Snapshots</name>
+            <url>http://repository.apache.org/snapshots/</url>
+        </repository>
+  </repositories>
+  
+  <pluginRepositories>
+        <pluginRepository>
+            <id>evolveum-nexus-releases</id>
+            <name>Internal Releases</name>
+            <url>http://nexus.evolveum.com/nexus/content/repositories/releases/</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>evolveum-nexus-snapshots</id>
+            <name>Internal Releases</name>
+            <url>http://nexus.evolveum.com/nexus/content/repositories/snapshots/</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>apache-snapshots</id>
+            <name>Apache Snapshots</name>
+            <url>http://repository.apache.org/snapshots/</url>
+        </pluginRepository>
+  </pluginRepositories>
   
   <distributionManagement>
     <repository>
